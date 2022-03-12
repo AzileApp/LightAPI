@@ -1,13 +1,18 @@
 const fastify = require('fastify');
+const fetch = require('node-fetch');
 const chalk = require('chalk');
-const axios = require('axios');
+const HttpsProxyAgent = require("https-proxy-agent")
+ const axios = require('axios');
 const mysql = require('mysql');
 const { Webhook, MessageBuilder } = require('discord-webhook-node');
 const Connection = require('mysql/lib/Connection');
+const { response } = require('express');
 const app = fastify();
 process.on('unhandledRejection', (reason, promise) => {
     console.log(reason.stack || reason)
 })
+const httpsAgent = new HttpsProxyAgent({host: "proxy.proxy-cheap.com", port: "31112", auth: "stiqnxo8:GJEuVAX23ux7MBMQ"})
+
 
 async function doTaskSet() {
     const con = mysql.createConnection({
@@ -22,13 +27,14 @@ async function doTaskSet() {
         if (err) throw err;
         console.log(`${chalk.yellowBright('[DATABASE] Database connected & synced.')}`);
     });
-
+   
+ try {
 	con.query(`SELECT * FROM shouts`, function (err, result) {
         result.forEach(async group => {
-            try {
-            await axios.get(`https://groups.roblox.com/v1/groups/${group.group_id}`).then(async data => {
-                data = data.data;
-
+            await fetch( `https://groups.roblox.com/v1/groups/${group.group_id}`,{ agent: httpsAgent})
+            .then( async response => response.json() )
+            .then( async response => {
+                data = response
                 if(data.shout.body !== group.lastShout) {
                     const hook = new Webhook(group.webhook);
                     
@@ -46,17 +52,18 @@ async function doTaskSet() {
                         console.log(`${chalk.greenBright('[UPDATE] Shouts updated.')}`);
                     })
                 }
-            })
-        }catch (err) {
-            console.error(`\n\n\nAn error occured whilst getting members.\n\n\n`);
-        }})
+            } );
+        
+       })
     })
-}
+}catch (err) {
+    console.error(`\n\n\nAn error occured whilst getting group shout.\n\n\n`);
+}}
 
 doTaskSet()
 setInterval(() => {
     doTaskSet();
-}, 15000);
+}, 300000);
 
 app.get('/check', function (request, reply) {
     doTaskSet();
